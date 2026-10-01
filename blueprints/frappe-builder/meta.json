@@ -1,0 +1,12 @@
+{
+  "id": "frappe-builder",
+  "name": "Frappe Builder",
+  "version": "v1.35.0",
+  "description": "Craft websites with an intuitive visual builder and publish them instantly.",
+  "logo": "logo.png",
+  "links": {
+    "github": "https://github.com/frappe/builder",
+    "website": "https://frappe.io/builder"
+  },
+  "tags": ["website-builder", "cms", "no-code", "frappe"]
+}

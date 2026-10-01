@@ -1,0 +1,51 @@
+name: Validate blueprints
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Rendered files are up to date
+        run: bash scripts/render.sh --check
+
+      - name: Static checks
+        run: bash scripts/check.sh
+
+      - name: docker compose config + setup-job script syntax
+        env:
+          SITE_NAME: ci.example.com
+          ADMIN_PASSWORD: ci-admin
+          DB_ROOT_PASSWORD: ci-root
+        run: |
+          set -euo pipefail
+          for compose in blueprints/*/docker-compose.yml; do
+            echo "::group::$compose"
+            docker compose -f "$compose" config --quiet
+            # Setup Jobs run `bash -c <script>`; check each script parses once
+            # Compose has resolved $$ escapes.
+            docker compose -f "$compose" config --format json \
+              | jq -r '.services | to_entries[] | select(.value.entrypoint == ["bash","-c"]) | .key' \
+              | while read -r svc; do
+                  docker compose -f "$compose" config --format json \
+                    | jq -r --arg s "$svc" '.services[$s].command[0]' > "/tmp/$svc.sh"
+                  bash -n "/tmp/$svc.sh"
+                  echo "ok: $svc script parses"
+                done
+            echo "::endgroup::"
+          done
+
+      - name: Compose fails loudly without required secrets
+        run: |
+          if docker compose -f blueprints/frappe-crm/docker-compose.yml config --quiet 2>/dev/null; then
+            echo "expected missing SITE_NAME/ADMIN_PASSWORD/DB_ROOT_PASSWORD to fail"; exit 1
+          fi

@@ -1,0 +1,74 @@
+[
+  {
+    "id": "frappe-builder",
+    "name": "Frappe Builder",
+    "version": "v1.35.0",
+    "description": "Craft websites with an intuitive visual builder and publish them instantly.",
+    "logo": "logo.png",
+    "links": {
+      "github": "https://github.com/frappe/builder",
+      "website": "https://frappe.io/builder"
+    },
+    "tags": ["website-builder", "cms", "no-code", "frappe"]
+  },
+  {
+    "id": "frappe-crm",
+    "name": "Frappe CRM",
+    "version": "v1.86.0",
+    "description": "Fully featured, open source CRM.",
+    "logo": "logo.svg",
+    "links": {
+      "github": "https://github.com/frappe/crm",
+      "website": "https://frappe.io/crm"
+    },
+    "tags": ["crm", "sales", "frappe"]
+  },
+  {
+    "id": "frappe-helpdesk",
+    "name": "Frappe Helpdesk",
+    "version": "v1.30.1",
+    "description": "Modern, streamlined, free and open source customer service software.",
+    "logo": "logo.svg",
+    "links": {
+      "github": "https://github.com/frappe/helpdesk",
+      "website": "https://frappe.io/helpdesk"
+    },
+    "tags": ["helpdesk", "support", "ticketing", "frappe"]
+  },
+  {
+    "id": "frappe-hr",
+    "name": "Frappe HR",
+    "version": "v16.20.1",
+    "description": "Open source HR and payroll software, built on ERPNext.",
+    "logo": "logo.svg",
+    "links": {
+      "github": "https://github.com/frappe/hrms",
+      "website": "https://frappe.io/hr"
+    },
+    "tags": ["hrms", "payroll", "hr", "erpnext", "frappe"]
+  },
+  {
+    "id": "frappe-insights",
+    "name": "Frappe Insights",
+    "version": "v3.14.2",
+    "description": "Open source business intelligence tool.",
+    "logo": "logo.svg",
+    "links": {
+      "github": "https://github.com/frappe/insights",
+      "website": "https://frappe.io/insights"
+    },
+    "tags": ["analytics", "bi", "dashboards", "frappe"]
+  },
+  {
+    "id": "frappe-learning",
+    "name": "Frappe Learning",
+    "version": "v2.64.0",
+    "description": "Easy to use, 100% open source learning management system.",
+    "logo": "logo.png",
+    "links": {
+      "github": "https://github.com/frappe/lms",
+      "website": "https://frappe.io/learning"
+    },
+    "tags": ["lms", "education", "courses", "frappe"]
+  }
+]

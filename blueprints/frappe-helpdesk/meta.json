@@ -1,0 +1,12 @@
+{
+  "id": "frappe-helpdesk",
+  "name": "Frappe Helpdesk",
+  "version": "v1.30.1",
+  "description": "Modern, streamlined, free and open source customer service software.",
+  "logo": "logo.svg",
+  "links": {
+    "github": "https://github.com/frappe/helpdesk",
+    "website": "https://frappe.io/helpdesk"
+  },
+  "tags": ["helpdesk", "support", "ticketing", "frappe"]
+}

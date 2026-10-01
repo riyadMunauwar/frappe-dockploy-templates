@@ -1,0 +1,3 @@
+# Setup jobs always run and are idempotent, not toggled by replica counts
+
+The Dokploy reference templates gate configurator/create-site/migration with `deploy.replicas: ${CREATE_SITE:-0}`-style flags. Our Blueprints instead always run three one-shot jobs in sequence (configurator → create-site → migrate), each of which detects completed work and exits 0, and long-running services wait on them via `depends_on: condition: service_completed_successfully`. This removes flags users can forget, avoids relying on `deploy.replicas` semantics that Dokploy doesn't document for non-Swarm Compose, and guarantees `bench migrate` runs after every image upgrade.

@@ -1,0 +1,12 @@
+{
+  "id": "frappe-crm",
+  "name": "Frappe CRM",
+  "version": "v1.86.0",
+  "description": "Fully featured, open source CRM.",
+  "logo": "logo.svg",
+  "links": {
+    "github": "https://github.com/frappe/crm",
+    "website": "https://frappe.io/crm"
+  },
+  "tags": ["crm", "sales", "frappe"]
+}

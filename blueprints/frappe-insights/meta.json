@@ -1,0 +1,12 @@
+{
+  "id": "frappe-insights",
+  "name": "Frappe Insights",
+  "version": "v3.14.2",
+  "description": "Open source business intelligence tool.",
+  "logo": "logo.svg",
+  "links": {
+    "github": "https://github.com/frappe/insights",
+    "website": "https://frappe.io/insights"
+  },
+  "tags": ["analytics", "bi", "dashboards", "frappe"]
+}

@@ -1,0 +1,12 @@
+{
+  "id": "frappe-learning",
+  "name": "Frappe Learning",
+  "version": "v2.64.0",
+  "description": "Easy to use, 100% open source learning management system.",
+  "logo": "logo.png",
+  "links": {
+    "github": "https://github.com/frappe/lms",
+    "website": "https://frappe.io/learning"
+  },
+  "tags": ["lms", "education", "courses", "frappe"]
+}

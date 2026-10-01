@@ -1,0 +1,143 @@
+name: Build Product Images
+
+# Builds one Product Image per images/<product-id>/ with frappe_docker's layered
+# Containerfile, smoke-tests that every app is inside, then pushes to GHCR.
+# See docs/adr/0001-own-product-images.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      product:
+        description: "Product to build (or 'all')"
+        type: choice
+        default: all
+        options: [all, frappe-builder, frappe-crm, frappe-helpdesk, frappe-hr, frappe-insights, frappe-learning]
+  push:
+    branches: [main]
+    paths:
+      - "images/**"
+      - ".github/workflows/build-images.yml"
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  # frappe_docker commit providing images/layered/Containerfile (pinned for reproducibility).
+  FRAPPE_DOCKER_REF: f09126b346c5f04a80068d0e34a0ca7c9fdaddb4
+  # Frappe framework branch; also selects the frappe/base and frappe/build image tags.
+  FRAPPE_BRANCH: version-16
+  # Moving tag pushed alongside each image's pinned IMAGE_TAG.
+  MAJOR_TAG: v16
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      products: ${{ steps.plan.outputs.products }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_PRODUCT: ${{ inputs.product }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          all=$(ls -1 images)
+          if [[ $EVENT == workflow_dispatch ]]; then
+            [[ $INPUT_PRODUCT == all ]] && selected=$all || selected=$INPUT_PRODUCT
+          elif [[ $BEFORE =~ ^0+$ ]] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null \
+               || git diff --name-only "$BEFORE" "$AFTER" | grep -q '^.github/workflows/build-images.yml$'; then
+            selected=$all
+          else
+            selected=$(git diff --name-only "$BEFORE" "$AFTER" | sed -n 's|^images/\([^/]*\)/.*|\1|p' | sort -u)
+          fi
+          # Drop products whose directory was deleted or renamed in this push.
+          selected=$(for p in $selected; do if [[ -d images/$p ]]; then echo "$p"; fi; done)
+          json=$(printf '%s\n' $selected | jq -R . | jq -cs 'map(select(length > 0))')
+          echo "Building: $json"
+          echo "products=$json" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.products != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        product: ${{ fromJSON(needs.plan.outputs.products) }}
+    env:
+      PRODUCT: ${{ matrix.product }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: repo
+
+      - uses: actions/checkout@v7
+        with:
+          repository: frappe/frappe_docker
+          ref: ${{ env.FRAPPE_DOCKER_REF }}
+          path: builder
+
+      - name: Read Product definition
+        run: |
+          set -euo pipefail
+          source "repo/images/$PRODUCT/image.env"
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          image="ghcr.io/$owner/$PRODUCT"
+          {
+            echo "IMAGE=$image"
+            echo "IMAGE_TAG=$IMAGE_TAG"
+            echo "TEST_IMAGE=local/$PRODUCT:${{ github.run_id }}"
+            # App directory names = repo names (verified: each app's pyproject name matches its repo).
+            echo "EXPECTED_APPS=frappe $(jq -r '.[].url | sub(".*/"; "")' "repo/images/$PRODUCT/apps.json" | tr '\n' ' ')"
+          } >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build smoke-test image
+        uses: docker/build-push-action@v7
+        with:
+          context: builder
+          file: builder/images/layered/Containerfile
+          build-args: |
+            FRAPPE_BRANCH=${{ env.FRAPPE_BRANCH }}
+            FRAPPE_PATH=https://github.com/frappe/frappe
+          secret-files: |
+            apps_json=repo/images/${{ env.PRODUCT }}/apps.json
+          cache-from: type=gha,scope=${{ env.PRODUCT }}
+          cache-to: type=gha,mode=max,scope=${{ env.PRODUCT }}
+          platforms: linux/amd64
+          load: true
+          tags: ${{ env.TEST_IMAGE }}
+
+      - name: Smoke test - every app is in the image
+        run: |
+          set -euo pipefail
+          present=$(docker run --rm --entrypoint ls "$TEST_IMAGE" /home/frappe/frappe-bench/apps)
+          echo "apps in image: $(echo $present)"
+          for app in $EXPECTED_APPS; do
+            grep -qx "$app" <<< "$present" || { echo "::error::app '$app' missing from $PRODUCT image"; exit 1; }
+          done
+          docker run --rm --entrypoint test "$TEST_IMAGE" -d /home/frappe/frappe-bench/assets/frappe
+
+      - uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push
+        run: |
+          set -euo pipefail
+          for tag in "$IMAGE_TAG" "$MAJOR_TAG"; do
+            docker tag "$TEST_IMAGE" "$IMAGE:$tag"
+            docker push "$IMAGE:$tag"
+          done
+          echo "Pushed $IMAGE:$IMAGE_TAG and $IMAGE:$MAJOR_TAG" >> "$GITHUB_STEP_SUMMARY"
