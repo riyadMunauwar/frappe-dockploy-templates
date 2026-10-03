@@ -4,6 +4,9 @@
 
 | Blueprint | Apps in the image | Version |
 |---|---|---|
+| `erpnext` | erpnext | v16.37.0 |
+| `erpnext-payments` | payments, erpnext | v16.37.0 |
+| `erpnext-suite` | payments, erpnext, hrms | v16.37.0 |
 | `frappe-builder` | builder | v1.35.0 |
 | `frappe-crm` | whatsapp, crm | v1.86.0 |
 | `frappe-helpdesk` | telephony, helpdesk | v1.30.1 |
@@ -30,7 +33,7 @@ scripts/check.sh             static checks (also run in CI)
 ## One-time setup
 
 1. Push to `main`. The **Build Product Images** workflow builds and pushes every image (or run it manually from the Actions tab).
-2. GHCR packages start private. For each `frappe-*` package under your GitHub profile → Packages → Package settings → **Change visibility → Public**, so Dokploy can pull without credentials.
+2. GHCR packages start private. For each `erpnext*` and `frappe-*` package under your GitHub profile → Packages → Package settings → **Change visibility → Public**, so Dokploy can pull without credentials.
 
 ## Deploying in Dokploy
 
@@ -67,7 +70,7 @@ The first deploy creates the site and installs the apps; it takes several minute
 
 ## Upgrading a product
 
-1. Edit `images/<id>/apps.json` (new app tags) and `IMAGE_TAG` in `images/<id>/image.env`.
+1. Edit `images/<id>/apps.json` (new app tags) and `IMAGE_TAG` in `images/<id>/image.env`. `IMAGE_TAG` is the Primary App's release; if only another app changed, append `-N` (e.g. `v16.37.0-1`) so a published tag is never rebuilt with different contents. `scripts/check.sh` warns when an app shared by several Products is pinned differently: bump them together unless you are holding one back on purpose.
 2. Update `version` in `blueprints/<id>/meta.json`.
 3. Run `bash scripts/render.sh && bash scripts/check.sh`, commit and push. CI builds the new image.
 4. In Dokploy, set `IMAGE_TAG` to the new version and redeploy; the `migrate` job runs automatically.

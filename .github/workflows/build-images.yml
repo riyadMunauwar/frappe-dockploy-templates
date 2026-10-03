@@ -11,7 +11,7 @@ on:
         description: "Product to build (or 'all')"
         type: choice
         default: all
-        options: [all, frappe-builder, frappe-crm, frappe-helpdesk, frappe-hr, frappe-insights, frappe-learning]
+        options: [all, erpnext, erpnext-payments, erpnext-suite, frappe-builder, frappe-crm, frappe-helpdesk, frappe-hr, frappe-insights, frappe-learning]
   push:
     branches: [main]
     paths:

@@ -1,0 +1,227 @@
+# Generated from templates/docker-compose.yml by scripts/render.sh for erpnext-suite. Do not edit by hand.
+#
+# Frappe production stack for Dokploy, modelled on frappe_docker's compose.yaml
+# + overrides/compose.mariadb.yaml + overrides/compose.redis.yaml.
+#
+# Setup Jobs (configurator -> create-site -> migrate) run on every deploy and are
+# idempotent; long-running services start only after all three succeed.
+# See docs/adr/0002-idempotent-setup-jobs.md.
+
+x-frappe-image: &frappe_image
+  image: ${IMAGE_NAME:-ghcr.io/riyadmunauwar/erpnext-suite}:${IMAGE_TAG:-v16.37.0}
+  pull_policy: ${PULL_POLICY:-always}
+
+x-frappe-volumes: &frappe_volumes
+  volumes:
+    - sites:/home/frappe/frappe-bench/sites
+    - logs:/home/frappe/frappe-bench/logs
+
+x-frappe-service: &frappe_service
+  <<: [*frappe_image, *frappe_volumes]
+  restart: unless-stopped
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+
+x-setup-job: &setup_job
+  <<: [*frappe_image, *frappe_volumes]
+  restart: "no"
+  entrypoint: ["bash", "-c"]
+
+services:
+  # ---------------------------------------------------------------- Setup Jobs
+
+  configurator:
+    <<: *setup_job
+    command:
+      - |
+        set -euo pipefail
+        ls -1 apps > sites/apps.txt
+        bench set-config -g db_host "$$DB_HOST"
+        bench set-config -gp db_port "$$DB_PORT"
+        bench set-config -g redis_cache "redis://redis-cache:6379"
+        bench set-config -g redis_queue "redis://redis-queue:6379"
+        bench set-config -g redis_socketio "redis://redis-queue:6379"
+        bench set-config -gp socketio_port 9000
+        echo "[configurator] done"
+    environment:
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-3306}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
+
+  create-site:
+    <<: *setup_job
+    command:
+      - |
+        set -euo pipefail
+        # Marker written only after every step succeeded, so a deploy that died
+        # between new-site and enable-scheduler resumes instead of skipping.
+        marker="sites/$$SITE_NAME/.create-site-complete"
+        if [[ -f "$$marker" ]]; then
+          echo "[create-site] site $$SITE_NAME already set up, skipping"
+          exit 0
+        fi
+        if [[ -f "sites/$$SITE_NAME/site_config.json" ]]; then
+          echo "[create-site] site $$SITE_NAME exists, finishing setup"
+        else
+          install_args=()
+          for app in $$INSTALL_APPS; do install_args+=(--install-app "$$app"); done
+          bench new-site \
+            --mariadb-user-host-login-scope='%' \
+            --db-root-username=root \
+            --db-root-password="$$DB_ROOT_PASSWORD" \
+            --admin-password="$$ADMIN_PASSWORD" \
+            "$${install_args[@]}" \
+            --set-default \
+            "$$SITE_NAME"
+        fi
+        bench --site "$$SITE_NAME" enable-scheduler
+        touch "$$marker"
+        echo "[create-site] $$SITE_NAME ready with apps: $$INSTALL_APPS"
+    environment:
+      SITE_NAME: ${SITE_NAME:?SITE_NAME is required}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+      DB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD is required}
+      INSTALL_APPS: ${INSTALL_APPS:-payments erpnext hrms}
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+  migrate:
+    <<: *setup_job
+    command:
+      - |
+        set -euo pipefail
+        bench --site "$$SITE_NAME" set-maintenance-mode on
+        bench --site "$$SITE_NAME" scheduler pause
+        trap 'bench --site "$$SITE_NAME" scheduler resume; bench --site "$$SITE_NAME" set-maintenance-mode off' EXIT
+        bench --site "$$SITE_NAME" migrate
+        echo "[migrate] done"
+    environment:
+      SITE_NAME: ${SITE_NAME:?SITE_NAME is required}
+    depends_on:
+      create-site:
+        condition: service_completed_successfully
+
+  # ------------------------------------------------------- Frappe services
+
+  backend:
+    <<: *frappe_service
+    environment:
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+      GUNICORN_THREADS: ${GUNICORN_THREADS:-4}
+      GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-120}
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "wait-for-it", "-t", "2", "127.0.0.1:8000"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  websocket:
+    <<: *frappe_service
+    command: ["node", "/home/frappe/frappe-bench/apps/frappe/socketio.js"]
+    expose:
+      - "9000"
+    healthcheck:
+      test: ["CMD", "wait-for-it", "-t", "2", "127.0.0.1:9000"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+  frontend:
+    <<: [*frappe_image, *frappe_volumes]
+    restart: unless-stopped
+    command: ["nginx-entrypoint.sh"]
+    environment:
+      BACKEND: backend:8000
+      SOCKETIO: websocket:9000
+      NGINX_LISTEN_PORT: "8080"
+      # Always serve the one Site, whatever domain Dokploy routes here.
+      FRAPPE_SITE_NAME_HEADER: ${SITE_NAME:?SITE_NAME is required}
+      UPSTREAM_REAL_IP_ADDRESS: ${UPSTREAM_REAL_IP_ADDRESS:-127.0.0.1}
+      UPSTREAM_REAL_IP_HEADER: ${UPSTREAM_REAL_IP_HEADER:-X-Forwarded-For}
+      UPSTREAM_REAL_IP_RECURSIVE: ${UPSTREAM_REAL_IP_RECURSIVE:-off}
+      PROXY_READ_TIMEOUT: ${PROXY_READ_TIMEOUT:-120}
+      CLIENT_MAX_BODY_SIZE: ${CLIENT_MAX_BODY_SIZE:-50m}
+    expose:
+      - "8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+      websocket:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8080/api/method/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  queue-short:
+    <<: *frappe_service
+    command: ["bench", "worker", "--queue", "short,default"]
+
+  queue-long:
+    <<: *frappe_service
+    command: ["bench", "worker", "--queue", "long,default,short"]
+
+  scheduler:
+    <<: *frappe_service
+    command: ["bench", "schedule"]
+
+  # ------------------------------------------------------- Data services
+
+  db:
+    image: mariadb:${DB_VERSION:-11.8}
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD is required}
+      MARIADB_AUTO_UPGRADE: "1"
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  redis-cache:
+    image: redis:${REDIS_VERSION:-8.6-alpine}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis-queue:
+    image: redis:${REDIS_VERSION:-8.6-alpine}
+    restart: unless-stopped
+    volumes:
+      - redis-queue-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  sites:
+  logs:
+  db-data:
+  redis-queue-data:

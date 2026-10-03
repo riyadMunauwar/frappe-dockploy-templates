@@ -74,6 +74,26 @@ for dir in blueprints/*/; do
   [[ -d "images/$id" ]] || fail "blueprints/$id has no images/$id Product definition"
 done
 
+# Shared Apps pinned differently across Products: warn only, since holding one
+# Product back (e.g. hrms not yet compatible with a newer erpnext) is legitimate.
+perl -MJSON::PP -e '
+  my $warn = $ENV{GITHUB_ACTIONS} ? "::warning::" : "WARN: ";
+  my %pins;
+  for my $f (@ARGV) {
+    local $/; open my $fh, "<", $f or next;
+    my ($id) = $f =~ m{images/([^/]+)/};
+    my $apps = eval { decode_json(scalar <$fh>) };
+    next unless ref $apps eq "ARRAY";
+    for my $app (@$apps) { push @{ $pins{$app->{url}}{$app->{branch}} }, $id }
+  }
+  for my $url (sort keys %pins) {
+    my %by = %{ $pins{$url} };
+    next if keys %by < 2;
+    print "$warn$url pinned differently: ",
+      join("; ", map { "$_ (" . join(" ", @{ $by{$_} }) . ")" } sort keys %by), "\n";
+  }
+' images/*/apps.json
+
 if ((failures)); then
   echo "$failures check(s) failed"
   exit 1

@@ -1,0 +1,13 @@
+{
+  "id": "erpnext-payments",
+  "name": "ERPNext + Payments",
+  "version": "v16.37.0",
+  "description": "ERPNext with online payment gateways (Stripe, Razorpay, PayPal and more).",
+  "logo": "logo.svg",
+  "links": {
+    "github": "https://github.com/frappe/erpnext",
+    "docs": "https://docs.frappe.io/erpnext",
+    "website": "https://frappe.io/erpnext"
+  },
+  "tags": ["erp", "accounting", "payments", "ecommerce", "frappe"]
+}

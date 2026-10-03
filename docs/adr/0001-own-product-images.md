@@ -7,3 +7,9 @@ Frappe production containers must have every App baked in at build time (`bench 
 - Upstream per-app images: zero CI, but four of six are currently broken and we can't fix their pipelines.
 - Dokploy builds at deploy time (`build:` in compose): recompiles frontend assets on the production server every deploy.
 - Runtime `bench get-app` on first boot (the dev `init.sh` pattern): explicitly unsupported for production by frappe_docker.
+
+## Amendment (2026-10-02): untagged Apps and tag uniqueness
+
+- Some Apps publish no release tags, and `apps.json` can only name a branch or tag (`bench get-app --branch`), not a commit. Such Apps track a branch instead, preferring the stable `version-N` branch where one exists: `payments` follows `version-16` (Frappe Learning, ERPNext + Payments, ERPNext Suite); `telephony` has only `develop` (Frappe Helpdesk). These images are not bit-for-bit reproducible from their tag; we accept that for small, slow-moving companion Apps.
+- ERPNext ships as its own Products (ERPNext, ERPNext + Payments, ERPNext Suite) under this same pattern, even though `frappe/erpnext` is the one upstream image that works.
+- `IMAGE_TAG` is the Primary App's release. If only a non-primary App changes, append `-N` (e.g. `v16.37.0-1`) so a published tag is never rebuilt with different contents.

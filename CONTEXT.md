@@ -19,6 +19,9 @@ _Avoid_: template folder
 The container image containing Frappe plus every App a Product needs, built by this repo's CI and published to this repo owner's GHCR.
 _Avoid_: official image (that means the upstream `ghcr.io/frappe/<app>` / `frappe/erpnext` images, which this project does not use for Products)
 
+**Primary App**:
+The App whose release version names a Product's Image tag and version (e.g. `erpnext` for ERPNext Suite, `hrms` for Frappe HR).
+
 **Site**:
 The single Frappe site a Blueprint deployment creates, named after the deployment's domain.
 
@@ -30,6 +33,8 @@ _Avoid_: init container, toggle service
 
 - A **Product** has exactly one **Blueprint** and one **Product Image**
 - A **Product Image** contains one or more **Apps**; the Blueprint installs them into one **Site**
+- A **Product** has exactly one **Primary App**
+- An **App** may appear in several **Products**; each Product pins it independently, and Products that share an App (e.g. ERPNext, ERPNext + Payments, ERPNext Suite) have no grouping between them
 
 ## Flagged ambiguities
 
